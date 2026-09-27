@@ -1,0 +1,20 @@
+{
+  "name": "fatalrun",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "FatalRun - multiplayer browser party game: lobby + obby minigames for up to 4 players",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node tools/smoke.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "three": "^0.186.1",
+    "ws": "^8.22.0"
+  }
+}
