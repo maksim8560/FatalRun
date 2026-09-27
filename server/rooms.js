@@ -299,15 +299,20 @@ export function handleMessage(socket, raw) {
 	}
 	if (!msg || typeof msg.t !== "string") return;
 
-	const sendErr = (text) => {
-		if (socket.readyState === 1) socket.send(JSON.stringify({ t: "err", message: text }));
+	const sendErr = (text, code = "error") => {
+		if (socket.readyState === 1) {
+			socket.send(JSON.stringify({ t: "err", code, message: text }));
+		}
 	};
-	const cleanName = (v) => String(v || "Player").replace(/[^\p{L}\p{N} _-]/gu, "").slice(0, 16) || "Player";
+	const cleanName = (v) =>
+		String(v || "Player")
+			.replace(/[^\p{L}\p{N} _-]/gu, "")
+			.slice(0, 16) || "Player";
 
 	switch (msg.t) {
 		case "create": {
 			const room = createRoom();
-			if (!room) return sendErr("Сервер перегружен, попробуйте снова");
+			if (!room) return sendErr("Сервер перегружен, попробуйте снова", "server_busy");
 			const { player } = room.add(socket, cleanName(msg.name));
 			socket.fr = { code: room.code, id: player.id };
 			room.ensureTimer();
@@ -319,9 +324,26 @@ export function handleMessage(socket, raw) {
 
 		case "join": {
 			const room = getRoom(msg.code);
-			if (!room) return sendErr("Комната не найдена");
+			// The host is a machine-readable case: a client that reconnects after the
+			// server dropped its rooms needs to know the room is gone for good.
+			if (!room) return sendErr("Комната не найдена", "room_not_found");
 			const { player, error } = room.add(socket, cleanName(msg.name));
-			if (error) return sendErr("Комната заполнена — максимум 4 игрока");
+			if (error) return sendErr("Комната заполнена — максимум 4 игрока", "room_full");
+			socket.fr = { code: room.code, id: player.id };
+			room.ensureTimer();
+			socket.send(JSON.stringify({ ...room.snapshot(), t: "joined", id: player.id }));
+			room.broadcast(room.snapshot(), player.id);
+			return;
+		}
+
+		case "resume": {
+			// Re-entry after a dropped socket. The room code is reused when the room
+			// survived, so friends do not have to re-read a new code from the host.
+			const room = getRoom(msg.code);
+			if (!room) return sendErr("Комната не найдена", "room_not_found");
+			if (room.phase === PHASE.RESULTS) return sendErr("Идёт подсчёт результатов", "round_busy");
+			const { player, error } = room.add(socket, cleanName(msg.name));
+			if (error) return sendErr("Комната заполнена — максимум 4 игрока", "room_full");
 			socket.fr = { code: room.code, id: player.id };
 			room.ensureTimer();
 			socket.send(JSON.stringify({ ...room.snapshot(), t: "joined", id: player.id }));
@@ -331,8 +353,8 @@ export function handleMessage(socket, raw) {
 
 		case "start": {
 			const { room, player } = bindingOf(socket);
-			if (!room || !player) return sendErr("Вы не в комнате");
-			if (!room.isHost(player.id)) return sendErr("Начать раунд может только хост");
+			if (!room || !player) return sendErr("Вы не в комнате", "not_in_room");
+			if (!room.isHost(player.id)) return sendErr("Начать раунд может только хост", "not_host");
 			room.startCountdown();
 			return;
 		}

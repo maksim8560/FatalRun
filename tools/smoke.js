@@ -224,12 +224,30 @@ async function main() {
 	check("results roll back into the lobby", a.state.phase === "lobby");
 	check("scores survive the round", a.state.players.every((p) => p.score > 0));
 
-	console.log("\ndisconnect");
-	// Free a slot, then prove a dropped socket gives it back.
+	console.log("\nresume");
+	// A dropped socket re-enters with the same room code, so friends keep their code.
 	d.send({ t: "leave" });
 	await a.until((s) => s.players.length === 3, 4000, "3 players after a leave");
-	check("voluntary leave frees the slot", a.state.players.length === 3);
+	const codeBefore = a.state.code;
+	const resume = new Client("Resume");
+	await resume.connect();
+	resume.send({ t: "resume", code: codeBefore, name: "Альфа" });
+	const resumed = await waitJoined(resume);
+	check("resume returns to the same room code", resumed.code === codeBefore, resumed.code);
+	await a.until((s) => s.players.length === 4, 4000, "4 players after resume");
+	check("voluntary leave frees the slot", a.state.players.length === 4);
+	resume.send({ t: "resume", code: "ZZZZ", name: "Ghost" });
+	await sleep(300);
+	check(
+		"resume into a missing room is reported",
+		resume.errors.some((m) => /Комната не найдена/.test(m)),
+	);
+	resume.send({ t: "leave" });
+	await sleep(400);
+	check("resumed player can leave again", a.state.players.length === 3);
 
+	console.log("\ndisconnect");
+	// A dropped socket must free the slot so a friend can take it.
 	const dropper = new Client("Drop");
 	await dropper.connect();
 	dropper.send({ t: "join", code, name: "Drop" });

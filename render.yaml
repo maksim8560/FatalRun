@@ -1,0 +1,23 @@
+# Render Blueprint: https://render.com/docs/blueprint-spec
+#
+# Connect this repository in Render ("New > Blueprint") and it will read this file.
+# The service is a Node web service that serves the client and hosts the WebSocket
+# lobby from a single process.
+
+services:
+  - type: web
+    name: fatalrun
+    runtime: node
+    plan: free
+    region: frankfurt
+    branch: main
+    buildCommand: npm ci --omit=dev
+    startCommand: node server/index.js
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      # server/index.js already defaults to 0.0.0.0, but be explicit for the platform.
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0

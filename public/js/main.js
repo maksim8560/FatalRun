@@ -148,6 +148,18 @@ net.on("roundEnd", (msg) => {
 });
 
 net.on("err", (msg) => {
+	// The room is gone for good (server restart, or a free host that dropped it).
+	// Stop trying to rejoin and send the player back to the menu.
+	if (inRoom && (msg.code === "room_not_found" || msg.code === "round_busy")) {
+		net.forgetJoin();
+		ui.showError(
+			msg.code === "round_busy"
+				? msg.message
+				: "Комната закрылась (сервер перезапустился). Заходите заново.",
+		);
+		resetToMenu();
+		return;
+	}
 	ui.showError(msg.message);
 	if (!inRoom) ui.show("menu");
 });

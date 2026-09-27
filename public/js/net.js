@@ -56,6 +56,8 @@ export class Net {
 				if (msg.t === "joined") {
 					this.myId = msg.id;
 					this.hasJoined = true;
+					// The room code is the handle a reconnect needs.
+					if (msg.code && this.lastJoin) this.lastJoin.code = msg.code;
 				}
 				this.emit(msg.t, msg);
 			});
@@ -76,11 +78,13 @@ export class Net {
 		}, Math.min(delay, RECONNECT_MAX_MS));
 	}
 
-	/** Re-enter the room we were in. Call this after the socket reports open again. */
+	/**
+	 * Re-enter the room we were in. Uses `resume` rather than replaying create/join so
+	 * the room code survives: the host keeps the same code their friends already have.
+	 */
 	rejoin() {
-		if (!this.lastJoin) return;
-		if (this.lastJoin.type === "create") this.send({ t: "create", name: this.lastJoin.name });
-		else this.send({ t: "join", code: this.lastJoin.code, name: this.lastJoin.name });
+		if (!this.lastJoin || !this.lastJoin.code) return false;
+		return this.send({ t: "resume", code: this.lastJoin.code, name: this.lastJoin.name });
 	}
 
 	/** Remember how this session entered a room so it can be restored. */
